@@ -77,7 +77,7 @@ def detect(source: str,
 
         # Preprocessing
         with dt[0]:
-            img = preprocess_image(img0, device, half)
+            img = preprocess_image(img0, device, imgsz, half)
 
         # Inference
         with torch.no_grad():
@@ -195,7 +195,7 @@ def detect(source: str,
         print(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, imgsz, imgsz)}' % t)
 
 
-def preprocess_image(img0, device, half):
+def preprocess_image(img0, device, imgsz, half):
     img = letterbox(img0, imgsz, stride=32)[0]
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
     img = np.ascontiguousarray(img)
