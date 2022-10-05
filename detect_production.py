@@ -105,8 +105,8 @@ def detect(source: str,
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                     if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(txt_path, 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
@@ -181,14 +181,14 @@ def detect(source: str,
         print(f"Precision: {round(np.mean(precision_images), 4)}")
         # recall - находим все объекты (уменьшаем FN)
         print(f"Recall: {round(np.mean(recall_images), 4)}")
-        print(f"th: {conf_thres}")
-        print(f"iou_thres: {iou_thres}")
 
         print()
         for key, value in map_classes_total.items():
             print(f"{names[key]}: {round(sum(value) / len(value), 4)}")
 
         print()
+        print(f"th: {conf_thres}")
+        print(f"iou_thres: {iou_thres}")
         print(f"mAP IoU: {map_iou}")
         t = tuple(x.t / len(images) * 1E3 for x in dt)  # speeds per image
         print(f"FPS: {round(len(images) / (dt[0].t + dt[1].t + dt[2].t), 2)}")
@@ -245,7 +245,7 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
 if __name__ == '__main__':
     project = 'furniture'
 
-    weights = f'data/detect_production/{project}/input/cfg/best.pt'
+    weights = f'data/detect_production/{project}/input/cfg/best_new.pt'
 
     source = f'data/detect_production/{project}/input/gt_images_txts'
     images_ext = 'jpg'
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     verbose = True
     half = True
-    draw_gt = False
+    draw_gt = True
 
     detect(source,
            images_ext,
