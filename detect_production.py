@@ -183,7 +183,7 @@ def detect(source: str,
         print(f"Recall: {round(np.mean(recall_images), 4)}")
 
         print()
-        for key, value in map_classes_total.items():
+        for key, value in dict(sorted(map_classes_total.items())).items():
             print(f"{names[key]}: {round(sum(value) / len(value), 4)}")
 
         print()
@@ -245,7 +245,7 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
 if __name__ == '__main__':
     project = 'furniture'
 
-    weights = f'data/detect_production/{project}/input/cfg/epoch_274_reparam.pt'
+    weights = f'data/detect_production/{project}/input/cfg/best_new.pt'
 
     source = f'data/detect_production/{project}/input/gt_images_txts'
     images_ext = 'jpg'
