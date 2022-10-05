@@ -12,9 +12,9 @@ def run(input_dir, weights, classes_count):
     # model trained by cfg/training/*.yaml
     ckpt = torch.load(os.path.join(input_dir, weights), map_location=device)
     # reparameterized model in cfg/deploy/*.yaml
-    model = Model('yolov7/cfg/deploy/yolov7.yaml', ch=3, nc=classes_count).to(device)
+    model = Model('cfg/deploy/yolov7.yaml', ch=3, nc=classes_count).to(device)
 
-    with open('yolov7/cfg/deploy/yolov7.yaml') as f:
+    with open('cfg/deploy/yolov7.yaml') as f:
         yml = yaml.load(f, Loader=yaml.SafeLoader)
     anchors = len(yml['anchors'][0]) // 2
 
@@ -59,7 +59,7 @@ def run(input_dir, weights, classes_count):
 
 if __name__ == "__main__":
     input_dir = 'data/detect_production/furniture/input/cfg'
-    weights = 'best.pt'
+    weights = 'epoch_274.pt'
     classes_count = 6
 
     run(input_dir, weights, classes_count)
