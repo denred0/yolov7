@@ -245,7 +245,7 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
 if __name__ == '__main__':
     project = 'furniture'
 
-    weights = f'data/detect_production/{project}/input/cfg/best_new.pt'
+    weights = f'data/detect_production/{project}/input/cfg/yolov7_furniture_mAP_64.pt'
 
     source = f'data/detect_production/{project}/input/gt_images_txts'
     images_ext = 'jpg'
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     verbose = True
     half = True
-    draw_gt = True
+    draw_gt = False
 
     detect(source,
            images_ext,
