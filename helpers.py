@@ -1,11 +1,9 @@
-import random
-import os
 import shutil
 import time
 import torch
 import cv2
 import contextlib
-from tqdm import tqdm
+import numpy as np
 
 from typing import List
 from pathlib import Path
@@ -75,3 +73,25 @@ def plot_one_box(im, box, label=None, color=(255, 255, 0), line_thickness=1, wri
         im = cv2.putText(im, label, (c1[0], c1[1] - 2), 0, tl / 3, [255, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
     return im
+
+
+def xyxy2xywhn_single(x, w=640, h=640):
+    # Convert nx4 boxes from [x1, y1, x2, y2] to [x, y, w, h] where xy1=top-left, xy2=bottom-right
+    y = np.copy(x)
+    y[0] = ((x[0] + x[2]) / 2) / w  # x center
+    y[1] = ((x[1] + x[3]) / 2) / h  # y center
+    y[2] = (x[2] - x[0]) / w  # width
+    y[3] = (x[3] - x[1]) / h  # height
+    return y
+
+
+def xywhn2xyxy(x, w=640, h=640, padw=0, padh=0):
+    # Convert nx4 boxes from [x, y, w, h] normalized to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    y = np.copy(x)
+    y[0] = w * (x[0] - x[2] / 2) + padw  # top left x
+    y[1] = h * (x[1] - x[3] / 2) + padh  # top left y
+    y[2] = w * (x[0] + x[2] / 2) + padw  # bottom right x
+    y[3] = h * (x[1] + x[3] / 2) + padh  # bottom right y
+
+    y = [int(a) for a in y]
+    return y

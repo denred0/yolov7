@@ -6,51 +6,21 @@ import numpy as np
 from numpy import random
 from collections import defaultdict
 
+from tqdm import tqdm
 from models.experimental import attempt_load
 from utils.general import check_img_size, non_max_suppression, scale_coords, xyxy2xywh
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, TracedModel
 
-from detect_production.utils import recreate_folder, get_all_files_in_folder, Profile
+from helpers import recreate_folder, get_all_files_in_folder, Profile
 from detect_production.map import mean_average_precision
 
 
-def detect(source: str,
-           images_ext: str,
-           weights: str,
-           save_dir: str,
-           annot_save_dir: str,
-           imgsz: int,
-           conf_thres: float,
-           iou_thres: float,
-           trace: bool,
-           map_iou: float,
-           map_calc: bool,
-           verbose: bool,
-           half: bool,
-           draw_gt: bool,
-           save_img=True,
-           save_txt=True,
-           augment=False,
-           save_conf=True) -> None:
-    save_dir = Path(save_dir)
-    annot_save_dir = Path(annot_save_dir)
-
-    images = get_all_files_in_folder(source, [f'*.{images_ext}'])
-
-    map_images = []
-    map_classes_total = defaultdict(list)
-    precision_images = []
-    recall_images = []
-
-    # Initialize
-    device = select_device('')
-    # half = device.type != 'cpu'  # half precision only supported on CUDA
-
+def get_model(device, weights, model_imgsz, trace, half):
     # Load model
     model = attempt_load(weights, map_location=device)  # load FP32 model
     stride = int(model.stride.max())  # model stride
-    imgsz = check_img_size(imgsz, s=stride)  # check img_size
+    imgsz = check_img_size(model_imgsz, s=stride)  # check img_size
 
     if trace:
         model = TracedModel(model, device, imgsz)
@@ -62,13 +32,53 @@ def detect(source: str,
     names = model.module.names if hasattr(model, 'module') else model.names
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
 
-    dt = (Profile(), Profile(), Profile())
-
     # Run inference
     if device.type != 'cpu':
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
 
-    for im in images:
+    return model, names, colors
+
+
+def detect(source: str,
+           images_ext: str,
+           weights: str,
+           save_dir: str,
+           annot_save_dir: str,
+           model_imgsz: int,
+           conf_thres: float,
+           iou_thres: float,
+           trace: bool,
+           map_iou: float,
+           map_calc: bool,
+           draw_detections: bool,
+           verbose: bool,
+           half: bool,
+           draw_gt: bool,
+           save_img=True,
+           save_txt=True,
+           augment=False,
+           save_conf=True,
+           draw_label=False,
+           print_speed=False) -> None:
+    save_dir = Path(save_dir)
+    annot_save_dir = Path(annot_save_dir)
+
+    images = get_all_files_in_folder(source, [f'*.{images_ext}'])
+
+    map_images = []
+    map_classes_total = defaultdict(list)
+    precision_images = []
+    recall_images = []
+
+    dt = (Profile(), Profile(), Profile())
+
+    # Initialize
+    device = select_device('')
+    # half = device.type != 'cpu'  # half precision only supported on CUDA
+
+    model, names, colors = get_model(device, weights, model_imgsz, trace, half)
+
+    for im in tqdm(images):
         img0 = cv2.imread(str(im))
         h, w = img0.shape[:2]
         assert img0 is not None, f'Image Not Found {im}'
@@ -77,7 +87,7 @@ def detect(source: str,
 
         # Preprocessing
         with dt[0]:
-            img = preprocess_image(img0, device, imgsz, half)
+            img = preprocess_image(img0, device, model_imgsz, half)
 
         # Inference
         with torch.no_grad():
@@ -89,8 +99,9 @@ def detect(source: str,
             pred = non_max_suppression(pred, conf_thres, iou_thres, classes=None, agnostic=False)
 
         # Print time (inference + NMS)
-        print(
-            f'Done. ({dt[0].dt * 1E3:.1f}ms) Preprocess, ({dt[1].dt * 1E3:.1f}ms) Inference, ({dt[2].dt * 1E3:.1f}ms) NMS')
+        if print_speed:
+            print(
+                f'Done. ({dt[0].dt * 1E3:.1f}ms) Preprocess, ({dt[1].dt * 1E3:.1f}ms) Inference, ({dt[2].dt * 1E3:.1f}ms) NMS')
 
         save_path = str(save_dir / im.name)  # img.jpg
         txt_path = str(annot_save_dir / f'{im.stem}.txt')
@@ -121,8 +132,12 @@ def detect(source: str,
                             xywh[3]
                         ])
 
-                    if save_img:  # Add bbox to image
-                        label = f'{names[int(cls)]} {conf:.2f}'
+                    if draw_detections:
+                        if draw_label:
+                            label = f'{names[int(cls)]} {conf:.2f}'
+                        else:
+                            label = ''
+                        # Add bbox to image
                         plot_one_box(xyxy, img0, label=label, color=colors[int(cls)], line_thickness=1)
 
         if map_calc:
@@ -192,11 +207,12 @@ def detect(source: str,
         print(f"mAP IoU: {map_iou}")
         t = tuple(x.t / len(images) * 1E3 for x in dt)  # speeds per image
         print(f"FPS: {round(len(images) / (dt[0].t + dt[1].t + dt[2].t), 2)}")
-        print(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, imgsz, imgsz)}' % t)
+        print(
+            f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, model_imgsz, model_imgsz)}' % t)
 
 
-def preprocess_image(img0, device, imgsz, half):
-    img = letterbox(img0, imgsz, stride=32)[0]
+def preprocess_image(img0, device, model_imgsz, half):
+    img = letterbox(img0, model_imgsz, stride=32)[0]
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
     img = np.ascontiguousarray(img)
 
@@ -243,9 +259,9 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
 
 
 if __name__ == '__main__':
-    project = 'furniture'
+    project = 'notes'
 
-    weights = f'data/detect_production/{project}/input/cfg/yolov7_furniture_mAP_64.pt'
+    weights = f'data/detect_production/{project}/input/cfg/best.pt'
 
     source = f'data/detect_production/{project}/input/gt_images_txts'
     images_ext = 'jpg'
@@ -259,26 +275,28 @@ if __name__ == '__main__':
     map_iou = 0.8
     map_calc = True
 
-    imgsz = 640
-    trace = True
     conf_thres = 0.4
     iou_thres = 0.45
 
+    model_imgsz = 640
+    trace = True
     verbose = True
     half = True
     draw_gt = False
+    draw_detections = True
 
     detect(source,
            images_ext,
            weights,
            save_dir,
            annot_save_dir,
-           imgsz,
+           model_imgsz,
            conf_thres,
            iou_thres,
            trace,
            map_iou,
            map_calc,
+           draw_detections,
            verbose,
            half,
            draw_gt)
