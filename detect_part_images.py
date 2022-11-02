@@ -370,6 +370,43 @@ def detect(
                 cv2.imwrite(str(save_path_vis), image_part)
 
 
+def plot_yolo_box(input_images_dir, images_ext, output_dir, classes_path, filter_classes):
+    images = get_all_files_in_folder((input_images_dir), [f'*.{images_ext}'])
+
+    for im in tqdm(images):
+
+        img = cv2.imread(str(im))
+        h, w = img.shape[:2]
+
+        if classes_path is not None:
+            with open(classes_path) as file:
+                classes = file.readlines()
+                classes = [line.rstrip() for line in classes]
+
+        with open(Path(input_images_dir).joinpath(f'{im.stem}.txt')) as file:
+            bboxes = file.readlines()
+            bboxes = [line.rstrip() for line in bboxes]
+
+        for box_str in bboxes:
+            box = [float(x) for x in box_str.split()]
+
+            label_num = str(int(box[0]))
+            if classes_path is not None:
+                label = classes[int(box[0]) - 1]
+
+            if filter_classes is not None and label not in filter_classes:
+                continue
+
+            xmin = int((box[1] - box[3] / 2) * w)
+            ymin = int((box[2] - box[4] / 2) * h)
+            xmax = int((box[1] + box[3] / 2) * w)
+            ymax = int((box[2] + box[4] / 2) * h)
+
+            plot_one_box([xmin, ymin, xmax, ymax], img, [255, 0, 0], label_num, 1)
+
+        cv2.imwrite(str(Path(output_dir).joinpath(im.name)), img)
+
+
 if __name__ == '__main__':
     project = 'notes'
 
@@ -409,6 +446,16 @@ if __name__ == '__main__':
         save_img
     )
 
+    # merge
     output_merged_dir = 'data/detect_part_images/output/merged/annotations'
     recreate_folder(output_merged_dir)
     merge_part_images(annot_save_dir, images_ext, output_merged_dir)
+
+    # draw predictions
+    input_images_dir = output_merged_dir
+
+    output_vis_dir = 'data/detect_part_images/output/merged/visualization'
+    recreate_folder(output_vis_dir)
+    classes_path = None
+    filter_classes = None
+    plot_yolo_box(input_images_dir, images_ext, output_vis_dir, classes_path, filter_classes)
